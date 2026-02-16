@@ -1,0 +1,61 @@
+# =========================
+# Build Directories
+# =========================
+# Ignore all CMake build and output folders
+build/
+build-*/
+out/
+bin/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# =========================
+# Compiled Binaries
+# =========================
+# Ignore executables and libraries
+*.exe
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
+*.pdb
+*.ilk
+
+# =========================
+# IDE and Environment Files
+# =========================
+# Visual Studio / MSVC
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# VS Code
+.vscode/
+
+# CLion / IntelliJ
+.idea/
+cmake-build-*/
+
+# =========================
+# OS Generated Files
+# =========================
+# Windows
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+
+# =========================
+# Game Engine Specifics
+# =========================
+# Ignore generated log files or local crash dumps
+*.log
+*.crash
+
+include/glm/doc
