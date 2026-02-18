@@ -1,4 +1,5 @@
 #include "../include/Shader.h"
+#include <glm/glm/glm.hpp>
 
 Shader::Shader(const char* vertexPath, const char* fragmentPath) {
     // 1. Retrieve the source code from file paths
@@ -88,6 +89,19 @@ void Shader::setInt(const std::string &name, int value) const {
 void Shader::setFloat(const std::string &name, float value) const { 
     glUniform1f(glGetUniformLocation(ID, name.c_str()), value); 
 }
+void Shader::setVec2(const std::string &name, const glm::vec2 &value) const {
+    glUniform2fv(glGetUniformLocation(ID, name.c_str()), 1, &value[0]);
+}
+void Shader::setVec2(const std::string &name, float x, float y) const {
+    glUniform2f(glGetUniformLocation(ID, name.c_str()), x, y);
+}
 void Shader::setFloat(const std::string &name, float x, float y, float z) const {
     glUniform3f(glGetUniformLocation(ID, name.c_str()), x, y, z);
+}
+void Shader::setMat4(const std::string &name, const glm::mat4 &mat) const {
+    // 1. Find where the variable is located in the shader memory
+    unsigned int uniformLocation = glGetUniformLocation(ID, name.c_str());
+    
+    // 2. Send the matrix data to that location
+    glUniformMatrix4fv(uniformLocation, 1, GL_FALSE, glm::value_ptr(mat));
 }

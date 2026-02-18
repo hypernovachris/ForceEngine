@@ -29,7 +29,7 @@ public:
         updateCameraVectors();
     }
 
-    glm::mat4 getViewMatrix() {
+    glm::mat4 getViewMatrix() const {
         return glm::lookAt(position, position + front, up);
     }
 

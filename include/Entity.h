@@ -1,76 +1,92 @@
 #ifndef ENTITY_H
 #define ENTITY_H
 
+#include <vector>
+#include <memory>
 #include <glm/glm/glm.hpp>
 #include <glm/glm/gtc/matrix_transform.hpp>
+#include "Component.h" // <-- NEW: We need to know what a Component is
 
 class Entity {
 public:
+
+    // Transform data (local space)
     glm::vec3 position;
     glm::vec3 rotation; // Euler angles (pitch, yaw, roll)
     glm::vec3 scale;
 
-    Entity() : position(0.0f), rotation(0.0f), scale(1.0f) {}
+    // The cached matrices
+    glm::mat4 localTransform;
+    glm::mat4 worldTransform;
 
-    // Generates the Model Matrix used to place the object in the 3D world
-    glm::mat4 getModelMatrix() const {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, position);
-        // Apply rotations (simplified for now)
-        model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-        model = glm::scale(model, scale);
-        return model;
+    // Scene graph hierarchy
+    Entity* parent;
+    std::vector<std::shared_ptr<Entity>> children;
+
+    // --- NEW: The Component List ---
+    // This is the "backpack" that holds this entity's behaviors (Renderer, Physics, etc.)
+    std::vector<std::shared_ptr<Component>> components;
+
+    Entity() : position(0.0f), rotation(0.0f), scale(1.0f),
+        localTransform(1.0f), worldTransform(1.0f), parent(nullptr) {}
+
+    virtual ~Entity() {}
+
+    // --- Graph methods ---
+    void addChild(std::shared_ptr<Entity> child) {
+        child->parent = this;
+        children.push_back(child);
     }
 
-    virtual void update(float deltaTime) {} // To be overridden by subclasses
-};
-
-class SpinningCube : public Entity {
-public:
-    void update(float deltaTime) override {
-        // Rotate continuously on Y and Z axes
-        rotation.y += 45.0f * deltaTime;
-        rotation.z += 45.0f * deltaTime;
-    }
-};
-
-class Projectile : public Entity {
-public:
-    Entity* target;
-    glm::vec3 velocity;
-    float gravityStrength;
-
-    // Constructor takes the target, starting position, and the initial push (velocity)
-    Projectile(Entity* t, glm::vec3 startPos, glm::vec3 startVelocity) 
-        : target(t), velocity(startVelocity), gravityStrength(15.0f) {
-        
-        position = startPos;
-        scale = glm::vec3(0.15f); // Make the projectiles tiny
+    // --- NEW: Component Management ---
+    // Adds a component and tells the component that THIS entity owns it
+    template <typename T>
+    void addComponent(std::shared_ptr<T> component) {
+        component->owner = this;
+        components.push_back(component);
+        component->awake(); // Run any setup code the component has
     }
 
-    void update(float deltaTime) override {
-        if (!target) return;
+    // Searches the backpack to see if the entity has a specific type of component
+    template <typename T>
+    std::shared_ptr<T> getComponent() {
+        for (auto& comp : components) {
+            std::shared_ptr<T> target = std::dynamic_pointer_cast<T>(comp);
+            if (target) return target;
+        }
+        return nullptr; // Returns null if not found
+    }
 
-        // 1. Find the direction vector to the target: target_pos - current_pos
-        glm::vec3 direction = target->position - this->position;
-        float distance = glm::length(direction);
+    // --- Matrix Math ---
+    void updateSelfAndChild() {
+        // 1. Calculate this entity's Local Transform
+        localTransform = glm::mat4(1.0f);
+        localTransform = glm::translate(localTransform, position);
+        localTransform = glm::rotate(localTransform, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+        localTransform = glm::rotate(localTransform, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+        localTransform = glm::rotate(localTransform, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        localTransform = glm::scale(localTransform, scale);
 
-        // 2. Only apply gravity if we aren't already colliding with the center
-        if (distance > 0.2f) {
-            glm::vec3 normalizedDirection = glm::normalize(direction);
-            
-            // 3. Add gravitational acceleration to our velocity
-            velocity += normalizedDirection * gravityStrength * deltaTime;
+        // 2. Calculate World Transform (Parent's World * My Local)
+        if (parent) {
+            worldTransform = parent->worldTransform * localTransform;
+        } else {
+            worldTransform = localTransform; // If no parent, local is world
         }
 
-        // 4. Update position based on our current velocity
-        position += velocity * deltaTime;
-        
-        // Bonus: Make the projectiles spin wildly as they fly
-        rotation.x += 180.0f * deltaTime;
-        rotation.y += 180.0f * deltaTime;
+        // 3. Recursively update all children
+        for (auto& child : children) {
+            child->updateSelfAndChild();
+        }
+    }
+
+    // --- REPLACED: The Engine Loop ---
+    // Instead of relying on a subclass to define what to do, 
+    // the Entity just tells all its components to do their jobs.
+    void update(float deltaTime) {
+        for (auto& comp : components) {
+            comp->update(deltaTime);
+        }
     }
 };
 

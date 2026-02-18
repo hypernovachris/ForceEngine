@@ -1,5 +1,11 @@
 #include "../include/Game.h"
 #include <iostream>
+#include <Material.h>
+#include <Mesh.h>
+#include <PrimitiveBuilder.h>
+#include <ResourceManager.h>
+#include <RendererComponent.h>
+#include <memory>
 
 Game::Game() : camera(glm::vec3(0.0f, 0.0f, 3.0f)) {
     // Camera starts 3 units back on the Z axis
@@ -7,90 +13,73 @@ Game::Game() : camera(glm::vec3(0.0f, 0.0f, 3.0f)) {
 
 Game::~Game() {
     // Clean up entities
-    for (Entity* entity : entities) {
-        delete entity;
-    }
+    // Automatic with shared_ptr
     entities.clear();
 }
 
 void Game::init() {
-    // 1. Load the shader
-    shader = new Shader("shaders/shader.vs", "shaders/shader.fs");
+    
+    auto root_entity = std::make_shared<Entity>();
+    entities.push_back(root_entity);
 
-    // 2. 3D Cube Vertices (Position only for now)
-    float vertices[] = {
-        // Positions          // Normals
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
+    // 1. Load Assets via your ResourceManager
+    auto sahurModel = ResourceManager::loadModel("assets/models/BetterSahur.fbx", "sahur");
+    auto metalMaterial = ResourceManager::createMaterial("assets/shaders/shader.vs", "assets/shaders/shader.fs");
 
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+    // 2. Create the Entity
+    auto sahurEntity = std::make_shared<Entity>();
 
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
 
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+    // 3. Assemble the Components
+    auto renderer = std::make_shared<RendererComponent>(sahurModel, metalMaterial);
+    
+    // Load Textures
+    auto diffuseMap = ResourceManager::loadTexture("assets/textures/glossy-marble-tile_albedo.png", "marble_diffuse");
+    auto specularMap = ResourceManager::loadTexture("assets/textures/glossy-marble-tile_specular.png", "marble_specular");
+    auto normalMap = ResourceManager::loadTexture("assets/textures/glossy-marble-tile_normal.png", "marble_normal");
 
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+    metalMaterial->diffuseMap = diffuseMap;
+    metalMaterial->specularMap = specularMap;
+    metalMaterial->normalMap = normalMap;
+    metalMaterial->shininess = 64.0f;
 
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
-    };
+    std::cout << "Texture IDs: " 
+              << diffuseMap->ID << " " 
+              << specularMap->ID << " " 
+              << normalMap->ID << std::endl;
+    std::cout << "Model Meshes: " << sahurModel->meshes.size() << std::endl;
 
-    // Generate VAO and VBO as before
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    sahurEntity->addComponent(renderer);
+    sahurEntity->position = glm::vec3(0.0f, -1.0f, 0.0f);
+    sahurEntity->scale = glm::vec3(0.01f);
+    sahurEntity->rotation = glm::vec3(90.0f, 180.0f, 90.0f);
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    root_entity->addChild(sahurEntity);
 
-    // Position attribute (now has a stride of 6 floats)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // Normal attribute (starts after the first 3 position floats)
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    // 4. Create a test Entity
-    centerCube = new SpinningCube();
-    centerCube->position = glm::vec3(0.0f, 0.0f, -5.0f); // Placed 5 units in front of origin
-    centerCube->scale = glm::vec3(1.5f); // Make it slightly larger
-    entities.push_back(centerCube);
 }
 
 void Game::processInput(GLFWwindow* window) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
 
-    // Camera WASD Movement
+// Camera WASD Movement
+    
+    static bool escPressedLastFrame = false;
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        if (!escPressedLastFrame) {
+            mouseCaptured = !mouseCaptured;
+            if (mouseCaptured) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                firstMouse = true;
+            } else {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            escPressedLastFrame = true;
+        }
+    } else {
+        escPressedLastFrame = false;
+    }
+
+    if (!mouseCaptured) return;
+
     float velocity = camera.movementSpeed * deltaTime;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.position += camera.front * velocity;
@@ -100,64 +89,60 @@ void Game::processInput(GLFWwindow* window) {
         camera.position -= camera.right * velocity;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.position += camera.right * velocity;
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-        camera.position += camera.up * velocity;
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-        camera.position -= camera.up * velocity;
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+        camera.position += camera.worldUp  * velocity;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+        camera.position -= camera.worldUp * velocity;
 
-    shootCooldown -= deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && shootCooldown <= 0.0f) {
-        
-        // Give the projectile an initial push forward out of the camera
-        glm::vec3 initialPush = camera.front * 8.0f; 
-        
-        Projectile* bullet = new Projectile(centerCube, camera.position, initialPush);
-        entities.push_back(bullet);
-        
-        shootCooldown = 0.15f; // Limits firing rate to ~6 cubes per second
-    }
 }
 
 void Game::update() {
     // Update all game objects
-    for (Entity* entity : entities) {
-        entity->update(deltaTime);
+    for (auto& rootNode : entities) {
+        rootNode->update(deltaTime);
+        rootNode->updateSelfAndChild();
     }
 }
 
+// 2. Traverse the Scene Graph and pass the data down
 void Game::render() {
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear depth buffer for 3D
+    renderer.clear();
+    
+    // Setup scene global data
+    // Setup scene global data
+    glm::vec3 lightPos(2.0f, 4.0f, 3.0f); 
+    glm::vec3 lightColor(1.0f, 1.0f, 1.0f);
+    renderer.beginScene(camera, lightPos, lightColor);
 
-    shader->use();
-
-    // Define a static light position slightly above, right, and forward of the center
-    glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
-
-    // Set lighting uniforms
-    shader->setFloat("lightPos", lightPos.x, lightPos.y, lightPos.z);
-    shader->setFloat("lightColor", 1.0f, 0.95f, 0.9f); // Warm white light
-    shader->setFloat("objectColor", 1.0f, 0.5f, 0.2f); // Orange cube
-
-    // 1. Create the Projection Matrix (Field of View, Aspect Ratio, Near Clip, Far Clip)
-    glm::mat4 projection = glm::perspective(glm::radians(camera.zoom), 800.0f / 600.0f, 0.1f, 100.0f);
-    unsigned int projLoc = glGetUniformLocation(shader->ID, "projection");
-    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-    // 2. Create the View Matrix (From our Camera class)
-    glm::mat4 view = camera.getViewMatrix();
-    unsigned int viewLoc = glGetUniformLocation(shader->ID, "view");
-    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-
-    // 3. Draw all Entities
-    glBindVertexArray(VAO);
-    for (Entity* entity : entities) {
-        // Get the Model Matrix from the Entity
-        glm::mat4 model = entity->getModelMatrix();
-        unsigned int modelLoc = glGetUniformLocation(shader->ID, "model");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-        // Draw the cube
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+    // Lambda for recursive drawing
+    // We can't use a local lambda easily with recursion in C++ without std::function overhead or auto deduction tricks
+    // So let's just make a member helper or a free function helper that takes the renderer
+    
+    // Let's use a standard implementation
+    for (auto& rootNode : entities) {
+        renderer.drawNode(rootNode);
     }
+
+    renderer.endScene();
+}
+
+void Game::handleMouse(double xposIn, double yposIn) {
+    if (!mouseCaptured) return;
+
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // Reversed since y-coordinates go from bottom to top
+
+    lastX = xpos;
+    lastY = ypos;
+
+    camera.processMouseMovement(xoffset, yoffset);
 }

@@ -3,31 +3,12 @@
 #include <iostream>
 #include "../include/Game.h"
 
-// Variables to prevent camera jumping on first mouse entry
-float lastX = 400.0f; // Center of an 800x600 window
-float lastY = 300.0f;
-bool firstMouse = true;
-
 // The static callback GLFW expects
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
-    float xpos = static_cast<float>(xposIn);
-    float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
-    }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // Reversed since y-coordinates go from bottom to top
-    lastX = xpos;
-    lastY = ypos;
-
     // Retrieve our Game instance from the window!
     Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
     if (game) {
-        game->camera.processMouseMovement(xoffset, yoffset);
+        game->handleMouse(xposIn, yposIn);
     }
 }
 
@@ -38,7 +19,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "My 3D Engine", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Force", NULL, NULL);
     glfwMakeContextCurrent(window);
 
     // Hide the cursor and capture it for the 3D camera
