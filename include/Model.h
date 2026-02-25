@@ -22,6 +22,8 @@ public:
         loadModel(path);
     }
 
+    Model() {} // Default constructor for procedural models
+
 private:
     void loadModel(const std::string& path) {
         Assimp::Importer importer;
@@ -45,6 +47,9 @@ private:
         directory = path.substr(0, path.find_last_of('/'));
 
         processNode(scene->mRootNode, scene);
+        
+        // Resize materials to match meshes so we can assign them later
+        materials.resize(meshes.size());
     }
 
     void processNode(aiNode *node, const aiScene *scene) {

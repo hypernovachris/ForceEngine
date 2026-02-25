@@ -5,12 +5,14 @@
 #include <memory>
 #include <glm/glm/glm.hpp>
 #include <glm/glm/gtc/matrix_transform.hpp>
+#include <string>
 #include "Component.h" // <-- NEW: We need to know what a Component is
 
-class Entity {
+class Entity : public std::enable_shared_from_this<Entity> {
 public:
 
     // Transform data (local space)
+    std::string name;
     glm::vec3 position;
     glm::vec3 rotation; // Euler angles (pitch, yaw, roll)
     glm::vec3 scale;
@@ -27,6 +29,8 @@ public:
     // This is the "backpack" that holds this entity's behaviors (Renderer, Physics, etc.)
     std::vector<std::shared_ptr<Component>> components;
 
+    bool pendingDestroy = false;
+
     Entity() : position(0.0f), rotation(0.0f), scale(1.0f),
         localTransform(1.0f), worldTransform(1.0f), parent(nullptr) {}
 
@@ -36,6 +40,28 @@ public:
     void addChild(std::shared_ptr<Entity> child) {
         child->parent = this;
         children.push_back(child);
+    }
+
+    void removeChild(std::shared_ptr<Entity> child) {
+        auto it = std::find(children.begin(), children.end(), child);
+        if (it != children.end()) {
+            (*it)->parent = nullptr;
+            children.erase(it);
+        }
+    }
+
+    std::shared_ptr<Entity> findChildByName(const std::string& searchName) {
+        for (auto& child : children) {
+            if (child->name == searchName) {
+                return child;
+            }
+            // Search recursively
+            auto found = child->findChildByName(searchName);
+            if (found) {
+                return found;
+            }
+        }
+        return nullptr;
     }
 
     // --- NEW: Component Management ---
@@ -84,8 +110,17 @@ public:
     // Instead of relying on a subclass to define what to do, 
     // the Entity just tells all its components to do their jobs.
     void update(float deltaTime) {
-        for (auto& comp : components) {
-            comp->update(deltaTime);
+        for (size_t i = 0; i < components.size(); ++i) {
+            components[i]->update(deltaTime);
+        }
+        
+        for (size_t i = 0; i < children.size(); ) {
+            if (children[i]->pendingDestroy) {
+                children.erase(children.begin() + i);
+            } else {
+                children[i]->update(deltaTime);
+                ++i;
+            }
         }
     }
 };

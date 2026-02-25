@@ -3,15 +3,6 @@
 #include <iostream>
 #include "../include/Game.h"
 
-// The static callback GLFW expects
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
-    // Retrieve our Game instance from the window!
-    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
-    if (game) {
-        game->handleMouse(xposIn, yposIn);
-    }
-}
-
 int main() {
     // 1. Initialize GLFW and Window
     glfwInit();
@@ -24,9 +15,6 @@ int main() {
 
     // Hide the cursor and capture it for the 3D camera
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    
-    // Set the mouse callback
-    glfwSetCursorPosCallback(window, mouse_callback);
 
     // 2. Load GLAD
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
@@ -34,7 +22,7 @@ int main() {
 
     // 3. Instantiate and Initialize our Game
     Game myGame;
-    myGame.init();
+    myGame.init(window);
 
     // Store the Game pointer inside the window for our mouse callback
     glfwSetWindowUserPointer(window, &myGame);

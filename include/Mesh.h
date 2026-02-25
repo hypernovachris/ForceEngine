@@ -10,7 +10,7 @@ public:
     int indexCount;
 
     Mesh(const std::vector<float>& vertices, const std::vector<unsigned int>& indices, bool hasNormals, bool hasUVs) {
-        indexCount = indices.size();
+        indexCount = static_cast<int>(indices.size());
 
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);

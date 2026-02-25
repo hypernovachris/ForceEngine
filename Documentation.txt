@@ -1,0 +1,10 @@
+For now, this is where I will write down a basic overview of *how* the engine
+works.
+
+    For now, I have my own format for storing models and materials. In this
+engine, a Model is a collection of Meshes and Materials. The collections are
+ordered, and elements in them correspond to one another. For example, the first
+mesh in the collection will use the first material in the collection, and so on.
+A mesh is a collection of vertices, and a material is a collection of textures.
+The formats .ForceModel and .ForceMaterial are pretty simple. You can
+probably understand them just by reading them.

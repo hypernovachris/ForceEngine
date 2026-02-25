@@ -5,6 +5,8 @@
 #include <iostream>
 #include <vector>
 #include <glm/glm/gtc/matrix_transform.hpp>
+#include "../include/LightComponent.h"
+#include "../include/ColliderComponent.h"
 
 Renderer::Renderer() {
 }
@@ -21,16 +23,32 @@ void Renderer::clear() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void Renderer::beginScene(const Camera& camera, const glm::vec3& lightPos, const glm::vec3& lightColor) {
-    m_viewMatrix = camera.getViewMatrix();
-    // Assuming aspect ratio is fixed for now, can be passed in later
-    m_projectionMatrix = glm::perspective(glm::radians(camera.zoom), 800.0f / 600.0f, 0.1f, 100.0f);
-    m_viewPos = camera.position;
-    m_lightPos = lightPos;
-    m_lightColor = lightColor;
+void Renderer::beginScene(CameraComponent* camera) {
+    if (camera) {
+        m_viewMatrix = camera->getViewMatrix();
+        m_projectionMatrix = camera->getProjectionMatrix();
+        if (camera->owner) {
+            m_viewPos = glm::vec3(camera->owner->worldTransform[3]);
+        }
+    } else {
+        m_viewMatrix = glm::mat4(1.0f);
+        m_projectionMatrix = glm::mat4(1.0f);
+        m_viewPos = glm::vec3(0.0f);
+    }
+
+    activeLights.clear();
+    renderQueue.clear();
 }
 
-void Renderer::drawNode(std::shared_ptr<Entity> node) {
+void Renderer::submitNode(std::shared_ptr<Entity> node) {
+    // 1. Extract light data
+    auto lightComp = node->getComponent<LightComponent>();
+    if (lightComp) {
+        glm::vec3 worldPos = glm::vec3(node->worldTransform[3]);
+        activeLights.push_back({worldPos, lightComp->color, lightComp->intensity});
+    }
+    
+    // 2. Extract render data
     auto renderComp = node->getComponent<RendererComponent>();
     
     if (renderComp && renderComp->model) {
@@ -42,22 +60,17 @@ void Renderer::drawNode(std::shared_ptr<Entity> node) {
             
             // Safety check in case a material is missing
             auto material = (i < model->materials.size()) ? model->materials[i] : nullptr; 
-            
-            // Override if the component has a specific material
-            if (renderComp->material) {
-                material = renderComp->material;
-            }
 
             // Pass the single mesh and material to the GPU
             if (mesh && material) {
-                this->draw(mesh, material, node->worldTransform);
+                renderQueue.push_back({mesh, material, node->worldTransform});
             }
         }
     }
 
     // Recurse through all children
     for (auto& child : node->children) {
-        drawNode(child);
+        submitNode(child);
     }
 }
 
@@ -71,9 +84,17 @@ void Renderer::draw(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> materi
     shader->setMat4("view", m_viewMatrix);
     shader->setMat4("projection", m_projectionMatrix);
     shader->setFloat("viewPos", m_viewPos.x, m_viewPos.y, m_viewPos.z);
-    shader->setFloat("lightPos", m_lightPos.x, m_lightPos.y, m_lightPos.z);
-    shader->setFloat("lightColor", m_lightColor.x, m_lightColor.y, m_lightColor.z);
 
+    // Send light data to shader
+    shader->setInt("numLights", activeLights.size());
+
+    // Loop through the vector and set the uniforms for each light
+    for (size_t i = 0; i < activeLights.size(); ++i) {
+        std::string number = std::to_string(i);
+        shader->setFloat(("lights[" + number + "].position").c_str(), activeLights[i].position.x, activeLights[i].position.y, activeLights[i].position.z);
+        shader->setFloat(("lights[" + number + "].color").c_str(), activeLights[i].color.x, activeLights[i].color.y, activeLights[i].color.z);
+        shader->setFloat(("lights[" + number + "].intensity").c_str(), activeLights[i].intensity);
+    }
     // Apply Material Properties
     material->apply();
 
@@ -85,5 +106,35 @@ void Renderer::draw(std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> materi
 }
 
 void Renderer::endScene() {
-    // Nothing for now
+    // We now have a complete list of lights and a complete list of meshes!
+    
+    for (const auto& cmd : renderQueue) {
+        // We pass the activeLights array to your low-level draw function
+        this->draw(cmd.mesh, cmd.material, cmd.transform);
+    }
+}
+
+void Renderer::renderDebug(std::shared_ptr<Model> cubeModel) {
+    if (!cubeModel || cubeModel->meshes.empty() || cubeModel->materials.empty()) return;
+    auto mesh = cubeModel->meshes[0];
+    auto material = cubeModel->materials[0];
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+    // Draw all active lights (fixed size 0.5 box)
+    for (const auto& light : activeLights) {
+        glm::mat4 modelMat = glm::translate(glm::mat4(1.0f), light.position);
+        modelMat = glm::scale(modelMat, glm::vec3(0.5f));
+        this->draw(mesh, material, modelMat);
+    }
+
+    // Draw all colliders
+    for (auto* collider : ColliderComponent::allColliders) {
+        if (!collider || !collider->owner) continue;
+        glm::mat4 modelMat = collider->owner->worldTransform;
+        modelMat = glm::scale(modelMat, collider->size);
+        this->draw(mesh, material, modelMat);
+    }
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }

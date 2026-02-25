@@ -1,14 +1,27 @@
 #include "../include/Game.h"
 #include <iostream>
-#include <Material.h>
-#include <Mesh.h>
-#include <PrimitiveBuilder.h>
-#include <ResourceManager.h>
-#include <RendererComponent.h>
+#include "Material.h"
+#include "Mesh.h"
+#include "PrimitiveBuilder.h"
+#include "ResourceManager.h"
+#include "RendererComponent.h"
+#include "LightComponent.h"
+#include "Entity.h"
 #include <memory>
+#include "SpinComponent.h"
+#include <cstdlib>
+#include "PhysicsComponent.h"
+#include "ColliderComponent.h"
+#include "FlapControllerComponent.h"
+#include "GameManagerComponent.h"
+#include "LinearMovementComponent.h"
+#include "SceneLoader.h"
+#include "ComponentRegistry.h"
 
-Game::Game() : camera(glm::vec3(0.0f, 0.0f, 3.0f)) {
-    // Camera starts 3 units back on the Z axis
+std::vector<ColliderComponent*> ColliderComponent::allColliders;
+
+Game::Game() {
+    // Camera starts 6 units back on the Z axis
 }
 
 Game::~Game() {
@@ -17,90 +30,75 @@ Game::~Game() {
     entities.clear();
 }
 
-void Game::init() {
+void Game::init(GLFWwindow* window) {
+
+    // 1. Prime the Component Registry
+    ComponentRegistry::registerComponent("RendererComponent", RendererComponent::deserialize);
+    ComponentRegistry::registerComponent("PhysicsComponent", PhysicsComponent::deserialize);
+    ComponentRegistry::registerComponent("ColliderComponent", ColliderComponent::deserialize);
+    ComponentRegistry::registerComponent("FlapControllerComponent", FlapControllerComponent::deserialize);
+    ComponentRegistry::registerComponent("CameraComponent", CameraComponent::deserialize);
+    ComponentRegistry::registerComponent("LightComponent", LightComponent::deserialize);
+    ComponentRegistry::registerComponent("GameManagerComponent", GameManagerComponent::deserialize);
     
     auto root_entity = std::make_shared<Entity>();
     entities.push_back(root_entity);
 
-    // 1. Load Assets via your ResourceManager
-    auto sahurModel = ResourceManager::loadModel("assets/models/BetterSahur.fbx", "sahur");
-    auto metalMaterial = ResourceManager::createMaterial("assets/shaders/shader.vs", "assets/shaders/shader.fs");
+    ResourceManager::parseForceModelFile("assets/models/david.ForceModel");
 
-    // 2. Create the Entity
-    auto sahurEntity = std::make_shared<Entity>();
+    SceneLoader::loadScene("assets/scene.ForceScene", root_entity, window);
 
+    // Find Camera and VisualPlayer
+    for (auto& child : root_entity->children) {
+        if (child->name == "Camera") {
+            activeCamera = child->getComponent<CameraComponent>().get();
+        }
+        else if (child->name == "Player") {
+            visualEntity = child->findChildByName("VisualPlayer");
+        }
+    }
 
-    // 3. Assemble the Components
-    auto renderer = std::make_shared<RendererComponent>(sahurModel, metalMaterial);
-    
-    // Load Textures
-    auto diffuseMap = ResourceManager::loadTexture("assets/textures/glossy-marble-tile_albedo.png", "marble_diffuse");
-    auto specularMap = ResourceManager::loadTexture("assets/textures/glossy-marble-tile_specular.png", "marble_specular");
-    auto normalMap = ResourceManager::loadTexture("assets/textures/glossy-marble-tile_normal.png", "marble_normal");
-
-    metalMaterial->diffuseMap = diffuseMap;
-    metalMaterial->specularMap = specularMap;
-    metalMaterial->normalMap = normalMap;
-    metalMaterial->shininess = 64.0f;
-
-    std::cout << "Texture IDs: " 
-              << diffuseMap->ID << " " 
-              << specularMap->ID << " " 
-              << normalMap->ID << std::endl;
-    std::cout << "Model Meshes: " << sahurModel->meshes.size() << std::endl;
-
-    sahurEntity->addComponent(renderer);
-    sahurEntity->position = glm::vec3(0.0f, -1.0f, 0.0f);
-    sahurEntity->scale = glm::vec3(0.01f);
-    sahurEntity->rotation = glm::vec3(90.0f, 180.0f, 90.0f);
-
-    root_entity->addChild(sahurEntity);
-
+    // Initialize debug model
+    auto debugMaterial = ResourceManager::loadForceMaterial("assets/materials/sun.ForceMaterial");
+    debugCubeModel = PrimitiveBuilder::createCube(1.0f, 1.0f, 1.0f, true, true);
+    if (!debugCubeModel->meshes.empty()) {
+        debugCubeModel->materials[0] = debugMaterial;
+    }
 }
 
 void Game::processInput(GLFWwindow* window) {
-
-// Camera WASD Movement
     
     static bool escPressedLastFrame = false;
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         if (!escPressedLastFrame) {
-            mouseCaptured = !mouseCaptured;
-            if (mouseCaptured) {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                firstMouse = true;
-            } else {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            }
             escPressedLastFrame = true;
         }
     } else {
         escPressedLastFrame = false;
     }
 
-    if (!mouseCaptured) return;
-
-    float velocity = camera.movementSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.position += camera.front * velocity;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.position -= camera.front * velocity;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.position -= camera.right * velocity;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.position += camera.right * velocity;
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        camera.position += camera.worldUp  * velocity;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-        camera.position -= camera.worldUp * velocity;
+    static bool f3PressedLastFrame = false;
+    if (glfwGetKey(window, GLFW_KEY_F3) == GLFW_PRESS) {
+        if (!f3PressedLastFrame) {
+            debugMode = !debugMode;
+            f3PressedLastFrame = true;
+        }
+    } else {
+        f3PressedLastFrame = false;
+    }
 
 }
 
 void Game::update() {
     // Update all game objects
-    for (auto& rootNode : entities) {
-        rootNode->update(deltaTime);
-        rootNode->updateSelfAndChild();
+    for (size_t i = 0; i < entities.size(); ) {
+        if (entities[i]->pendingDestroy) {
+            entities.erase(entities.begin() + i);
+        } else {
+            entities[i]->update(deltaTime);
+            entities[i]->updateSelfAndChild();
+            ++i;
+        }
     }
 }
 
@@ -109,10 +107,9 @@ void Game::render() {
     renderer.clear();
     
     // Setup scene global data
-    // Setup scene global data
-    glm::vec3 lightPos(2.0f, 4.0f, 3.0f); 
-    glm::vec3 lightColor(1.0f, 1.0f, 1.0f);
-    renderer.beginScene(camera, lightPos, lightColor);
+    if (activeCamera) {
+        renderer.beginScene(activeCamera);
+    }
 
     // Lambda for recursive drawing
     // We can't use a local lambda easily with recursion in C++ without std::function overhead or auto deduction tricks
@@ -120,29 +117,12 @@ void Game::render() {
     
     // Let's use a standard implementation
     for (auto& rootNode : entities) {
-        renderer.drawNode(rootNode);
+        renderer.submitNode(rootNode);
     }
 
     renderer.endScene();
-}
 
-void Game::handleMouse(double xposIn, double yposIn) {
-    if (!mouseCaptured) return;
-
-    float xpos = static_cast<float>(xposIn);
-    float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
+    if (debugMode) {
+        renderer.renderDebug(debugCubeModel);
     }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // Reversed since y-coordinates go from bottom to top
-
-    lastX = xpos;
-    lastY = ypos;
-
-    camera.processMouseMovement(xoffset, yoffset);
 }
