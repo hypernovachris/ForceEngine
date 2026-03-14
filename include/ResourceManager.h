@@ -111,7 +111,7 @@ public:
         material->diffuseMap = diffuse; // Note: Assumes your Material class takes raw pointers or adapt to shared_ptr
         material->specularMap = specular;
         material->normalMap = normal;
-        material->shininess = shininess;
+        material->materialData.shininess = shininess;
         material->textureScale = textureScale;
     
         return material;

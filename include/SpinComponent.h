@@ -7,7 +7,7 @@
 #include <glm/glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm/gtx/euler_angles.hpp>
-#include <GLFW/glfw3.h>
+
 
 class SpinComponent : public Component {
 public:
@@ -71,7 +71,7 @@ public:
         }
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         float x, y, z, speed;
         
         // Read the axis and speed

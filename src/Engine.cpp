@@ -1,6 +1,7 @@
 #include "Engine.h"
 #include <iostream>
 #include "ComponentRegistry.h"
+#include <SDL3_shadercross/SDL_shadercross.h>
 
 // Core components for priming the registry natively
 #include "RendererComponent.h"
@@ -20,32 +21,34 @@ Engine::~Engine() {
 }
 
 bool Engine::init(int width, int height, const char* title) {
-    // 1. Initialize GLFW and Window
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
+    // 1. Initialize SDL and Window
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
         return false;
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window = glfwCreateWindow(width, height, title, NULL, NULL);
-    if (!window) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
+    if (!SDL_ShaderCross_Init()) {
+        std::cerr << "Failed to initialize SDL_shadercross: " << SDL_GetError() << std::endl;
+        SDL_Quit();
         return false;
     }
-    glfwMakeContextCurrent(window);
+
+    window = SDL_CreateWindow(title, width, height, SDL_WINDOW_RESIZABLE);
+    if (!window) {
+        std::cerr << "Failed to create SDL window: " << SDL_GetError() << std::endl;
+        SDL_Quit();
+        return false;
+    }
 
     // Hide the cursor and capture it for the 3D camera
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    SDL_HideCursor();
+    SDL_SetWindowRelativeMouseMode(window, true);
 
-    // 2. Load GLAD
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
+    // 2. Initialize RHI Device
+    if (!RHI_Device::getInstance().init(window)) {
+        std::cerr << "Failed to initialize RHI Device" << std::endl;
         return false;
     }
-    glEnable(GL_DEPTH_TEST); // Enable 3D depth testing
 
     // 3. Prime the internal Component Registry with core engine components
     ComponentRegistry::registerComponent("RendererComponent", RendererComponent::deserialize);
@@ -67,14 +70,17 @@ bool Engine::init(int width, int height, const char* title) {
         debugCubeModel->materials[0] = debugMaterial;
     }
 
+    isRunning = true;
+    lastFrame = SDL_GetTicks() / 1000.0f; // SDL_GetTicks is in milliseconds
+
     return true;
 }
 
 void Engine::run() {
     // 4. The Master Engine Loop
-    while (!glfwWindowShouldClose(window)) {
+    while (isRunning) {
         // Calculate deltaTime
-        float currentFrame = static_cast<float>(glfwGetTime());
+        float currentFrame = SDL_GetTicks() / 1000.0f;
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
@@ -82,9 +88,6 @@ void Engine::run() {
         processInput();
         update();
         render();
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
     }
 }
 
@@ -93,38 +96,34 @@ void Engine::shutdown() {
         rootEntity->children.clear();
         rootEntity.reset();
     }
+    RHI_Device::getInstance().shutdown();
     if (window) {
-        glfwDestroyWindow(window);
+        SDL_DestroyWindow(window);
         window = nullptr;
     }
-    glfwTerminate();
+    SDL_ShaderCross_Quit();
+    SDL_Quit();
 }
 
 void Engine::processInput() {
-    static bool escPressedLastFrame = false;
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        if (!escPressedLastFrame) {
-            // Toggle cursor capture
-            int currentMode = glfwGetInputMode(window, GLFW_CURSOR);
-            if (currentMode == GLFW_CURSOR_DISABLED) {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            } else {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_EVENT_QUIT) {
+            isRunning = false;
+        } else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+            if (event.key.key == SDLK_ESCAPE) {
+                // Toggle relative mouse mode
+                bool relative = SDL_GetWindowRelativeMouseMode(window);
+                SDL_SetWindowRelativeMouseMode(window, !relative);
+                if (relative) {
+                    SDL_ShowCursor();
+                } else {
+                    SDL_HideCursor();
+                }
+            } else if (event.key.key == SDLK_F3) {
+                debugMode = !debugMode;
             }
-            escPressedLastFrame = true;
         }
-    } else {
-        escPressedLastFrame = false;
-    }
-
-    static bool f3PressedLastFrame = false;
-    if (glfwGetKey(window, GLFW_KEY_F3) == GLFW_PRESS) {
-        if (!f3PressedLastFrame) {
-            debugMode = !debugMode;
-            f3PressedLastFrame = true;
-        }
-    } else {
-        f3PressedLastFrame = false;
     }
 }
 
@@ -146,8 +145,6 @@ void Engine::update() {
 }
 
 void Engine::render() {
-    renderer.clear();
-    
     // Setup scene global data
     if (activeCamera) {
         renderer.beginScene(activeCamera);

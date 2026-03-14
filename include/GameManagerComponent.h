@@ -137,7 +137,7 @@ public:
         rootEntity->addChild(topPipe);
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         auto gm = std::make_shared<GameManagerComponent>();
         iss >> gm->playerEntityName >> gm->leftBoundaryEntityName;
         // The pipe model needs to be created or fetched from ResourceManager

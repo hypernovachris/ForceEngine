@@ -1,84 +1,80 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include <glad/glad.h>
+#include "RHI/RHI_Buffer.h"
 #include <vector>
+
+struct Vertex {
+    float position[3];
+    float normal[3];
+    float texCoords[2];
+    float tangent[3];
+};
 
 class Mesh {
 public:
-    unsigned int VAO, VBO, EBO;
-    int indexCount;
+    RHI_Buffer vertexBuffer;
+    RHI_Buffer indexBuffer;
+    Uint32 vertexCount;
+    Uint32 indexCount;
 
     Mesh(const std::vector<float>& vertices, const std::vector<unsigned int>& indices, bool hasNormals, bool hasUVs) {
-        indexCount = static_cast<int>(indices.size());
-
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-        glGenBuffers(1, &EBO); // The new Index Buffer
-
-        glBindVertexArray(VAO);
-
-        // Load Vertex Data
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-        // Load Index Data
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
-
-        // Calculate dynamic stride
-        int stride = 3; // Position (x, y, z)
+        indexCount = static_cast<Uint32>(indices.size());
+        
+        // Re-pack generic float vector into Vertex structs for simpler RHI binding
+        // Assuming the input vertices were tightly packed according to the old stride
+        std::vector<Vertex> packedVertices;
+        int stride = 3; 
         if (hasNormals) stride += 3;
         if (hasUVs) stride += 2;
-        
-        // We will assume that if you request both Normals AND UVs, 
-        // you want Tangents for Normal Mapping.
         bool hasTangents = (hasNormals && hasUVs); 
-        if (hasTangents) stride += 3; 
+        if (hasTangents) stride += 3;
+
+        vertexCount = static_cast<Uint32>(vertices.size() / stride);
+        packedVertices.reserve(vertexCount);
         
-        int strideBytes = stride * sizeof(float);
-
-        // 1. Position
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, strideBytes, (void*)0);
-        glEnableVertexAttribArray(0);
-
-        int offset = 3;
-        // 2. Normal 
-        if (hasNormals) {
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, strideBytes, (void*)(offset * sizeof(float)));
-            glEnableVertexAttribArray(1);
-            offset += 3;
+        for (size_t i = 0; i < vertexCount; ++i) {
+            size_t base = i * stride;
+            Vertex v = {};
+            
+            v.position[0] = vertices[base + 0];
+            v.position[1] = vertices[base + 1];
+            v.position[2] = vertices[base + 2];
+            
+            int offset = 3;
+            if (hasNormals) {
+                v.normal[0] = vertices[base + offset + 0];
+                v.normal[1] = vertices[base + offset + 1];
+                v.normal[2] = vertices[base + offset + 2];
+                offset += 3;
+            }
+            if (hasUVs) {
+                v.texCoords[0] = vertices[base + offset + 0];
+                v.texCoords[1] = vertices[base + offset + 1];
+                offset += 2;
+            }
+            if (hasTangents) {
+                v.tangent[0] = vertices[base + offset + 0];
+                v.tangent[1] = vertices[base + offset + 1];
+                v.tangent[2] = vertices[base + offset + 2];
+            } else {
+                v.tangent[0] = 1.0f; v.tangent[1] = 0.0f; v.tangent[2] = 0.0f;
+            }
+            packedVertices.push_back(v);
         }
 
-        // 3. UV 
-        if (hasUVs) {
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, strideBytes, (void*)(offset * sizeof(float)));
-            glEnableVertexAttribArray(2);
-            offset += 2;
-        } else {
-            glDisableVertexAttribArray(2);
-            glVertexAttrib2f(2, 0.0f, 0.0f); // Default UV
-        }
-        
-        // 4. Tangent
-        if (hasTangents) {
-            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, strideBytes, (void*)(offset * sizeof(float)));
-            glEnableVertexAttribArray(3);
-        } else {
-            glDisableVertexAttribArray(3);
-            glVertexAttrib3f(3, 1.0f, 0.0f, 0.0f); // Default Tangent (Tangent X-axis)
-        }
+        // Create & Upload Vertex Buffer
+        Uint32 vSize = vertexCount * sizeof(Vertex);
+        vertexBuffer.create(SDL_GPU_BUFFERUSAGE_VERTEX, vSize);
+        vertexBuffer.uploadData(packedVertices.data(), vSize);
 
-        // Unbind VAO
-        glBindVertexArray(0);
+        // Create & Upload Index Buffer
+        Uint32 iSize = indexCount * sizeof(Uint32);
+        indexBuffer.create(SDL_GPU_BUFFERUSAGE_INDEX, iSize);
+        indexBuffer.uploadData(indices.data(), iSize);
     }
-
-    void draw() {
-        glBindVertexArray(VAO);
-        // We now use glDrawElements instead of glDrawArrays
-        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0); 
-        glBindVertexArray(0);
-    }
+    
+    // The renderer will now handle drawing by binding these buffers to a command buffer
 };
 
 #endif

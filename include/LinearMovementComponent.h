@@ -4,7 +4,7 @@
 #include "Component.h"
 #include "Entity.h"
 #include <glm/glm/glm.hpp>
-#include <GLFW/glfw3.h>
+
 
 class LinearMovementComponent : public Component {
 public:
@@ -21,7 +21,7 @@ public:
         owner->position += velocity * deltaTime;
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         float x, y, z;
         if (iss >> x >> y >> z) {
             return std::make_shared<LinearMovementComponent>(glm::vec3(x, y, z));

@@ -4,25 +4,26 @@
 #include "Component.h"
 #include "Entity.h"
 #include "PhysicsComponent.h"
-#include <GLFW/glfw3.h> // Assuming you are using GLFW for your window
+#include <SDL3/SDL.h>
 #include <iostream>
 
 class FlapControllerComponent : public Component {
 public:
-    GLFWwindow* window;
+    SDL_Window* window;
     float flapForce;
     
     // We use this to ensure the player has to let go of the spacebar before flapping again
     bool spaceWasPressed = false;
 
-    FlapControllerComponent(GLFWwindow* win, float force = 7.0f) 
+    FlapControllerComponent(SDL_Window* win, float force = 7.0f) 
         : window(win), flapForce(force) {}
 
     void update(float deltaTime) override {
         if (!owner) return;
 
         // 1. Poll the keyboard state
-        bool spaceIsPressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+        const bool* state = SDL_GetKeyboardState(NULL);
+        bool spaceIsPressed = state[SDL_SCANCODE_SPACE];
 
         // 2. Check if the key was JUST pressed this frame
         if (spaceIsPressed && !spaceWasPressed) {
@@ -41,7 +42,7 @@ public:
         spaceWasPressed = spaceIsPressed;
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         float force = 7.0f;
         if (!iss.eof()) {
             iss >> force;

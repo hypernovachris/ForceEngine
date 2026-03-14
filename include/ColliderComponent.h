@@ -6,7 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <glm/glm/glm.hpp>
-#include <GLFW/glfw3.h>
+
 
 class ColliderComponent : public Component {
 public:
@@ -49,7 +49,7 @@ public:
         return collisionX && collisionY;
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         glm::vec3 size(1.0f);
         bool isTrigger = false;
         // The scene file will provide: width height depth [isTrigger]

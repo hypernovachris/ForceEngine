@@ -4,7 +4,7 @@
 #include "Component.h"
 #include "Entity.h"
 #include <glm/glm/glm.hpp>
-#include <GLFW/glfw3.h>
+
 
 class PhysicsComponent : public Component {
 public:
@@ -38,7 +38,7 @@ public:
         velocity.y = upwardForce;
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         // PhysicsComponent has no parameters in its constructor
         return std::make_shared<PhysicsComponent>();
     }

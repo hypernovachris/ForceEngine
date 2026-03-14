@@ -4,8 +4,9 @@
 #include "Component.h"
 #include "Entity.h"
 #include <glm/glm/glm.hpp>
+#include <sstream>
 #include <glm/glm/gtc/matrix_transform.hpp>
-#include <GLFW/glfw3.h> // Added GLFW include for deserialization
+#include <SDL3/SDL.h>
 
 class CameraComponent : public Component {
 public:
@@ -31,7 +32,7 @@ public:
         return glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
     }
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         float fov = 45.0f;
         float aspect = 800.0f / 600.0f;
         float nearP = 0.1f;

@@ -5,7 +5,7 @@
 #include <glm/glm/glm.hpp>
 #include <sstream>
 #include <memory>
-#include <GLFW/glfw3.h>
+
 
 class LightComponent : public Component {
 public:
@@ -19,7 +19,7 @@ public:
 
     LightComponent(glm::vec3 col, float i) : color(col), intensity(i) {}
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         float r, g, b, intensity;
         iss >> r >> g >> b >> intensity;
         return std::make_shared<LightComponent>(glm::vec3(r, g, b), intensity);

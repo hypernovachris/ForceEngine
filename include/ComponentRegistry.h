@@ -7,10 +7,10 @@
 #include <string>
 #include <memory>
 #include <sstream>
-#include <GLFW/glfw3.h> // Needed for components like FlapController
+
 
 // The signature for our creation functions
-using ComponentFactoryFunc = std::function<std::shared_ptr<Component>(std::istringstream&, GLFWwindow*)>;
+using ComponentFactoryFunc = std::function<std::shared_ptr<Component>(std::istringstream&, SDL_Window*)>;
 
 class ComponentRegistry {
 public:
@@ -20,7 +20,7 @@ public:
         map[name] = func;
     }
 
-    static std::shared_ptr<Component> create(const std::string& name, std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> create(const std::string& name, std::istringstream& iss, SDL_Window* window) {
         if (map.find(name) != map.end()) {
             return map[name](iss, window); // Call the specific component's static function
         }

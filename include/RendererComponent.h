@@ -14,7 +14,7 @@ public:
         : model(mod) {}
 
     // The factory function required by the ComponentRegistry
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, GLFWwindow* window) {
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
         std::string modelName;
         
         // Read the model name from the text stream (e.g., "david" or "sci_fi_crate")

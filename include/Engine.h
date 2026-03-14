@@ -4,8 +4,8 @@
 #include <vector>
 #include <memory>
 #include <string>
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
+#include "RHI/RHI_Device.h"
 #include "Entity.h"
 #include "Renderer.h"
 #include "CameraComponent.h"
@@ -36,7 +36,7 @@ public:
     float lastFrame = 0.0f;
 
     // Expose the window if the specific game apps need it
-    GLFWwindow* getWindow() const { return window; }
+    SDL_Window* getWindow() const { return window; }
 
 protected:
     void processInput();
@@ -44,7 +44,8 @@ protected:
     void render();
 
 private:
-    GLFWwindow* window = nullptr;
+    SDL_Window* window = nullptr;
+    bool isRunning = false;
 };
 
 #endif

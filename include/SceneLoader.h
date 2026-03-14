@@ -21,8 +21,8 @@
 class SceneLoader {
 public:
     // We pass the rootEntity so the loader knows where to put the base objects
-    // We pass the GLFWwindow so the FlapController can be initialized
-    static void loadScene(const std::string& filepath, std::shared_ptr<Entity> rootEntity, GLFWwindow* window) {
+    // We pass the SDL_Window so the FlapController can be initialized
+    static void loadScene(const std::string& filepath, std::shared_ptr<Entity> rootEntity, SDL_Window* window) {
         std::ifstream file(filepath);
         if (!file.is_open()) {
             std::cerr << "Failed to open scene file: " << filepath << std::endl;
