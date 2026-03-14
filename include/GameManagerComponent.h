@@ -11,6 +11,8 @@
 #include <iostream>
 #include <memory>
 #include <cstdlib>
+#include "PrimitiveBuilder.h"
+#include "ResourceManager.h"
 
 class GameManagerComponent : public Component {
 public:

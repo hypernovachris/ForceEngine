@@ -4,39 +4,19 @@
 #include <vector>
 #include <memory>
 #include "Entity.h"
-#include "Renderer.h"
-#include "CameraComponent.h"
-#include "Shader.h"
-#include "ResourceManager.h"
-#include <GLFW/glfw3.h>
-#include <glm/glm/gtc/matrix_transform.hpp>
-#include <glm/glm/gtc/type_ptr.hpp>
+#include "Engine.h"
 
+// The Game class now represents a specific application running on the Engine.
 class Game {
 public:
-    Renderer renderer;
-    unsigned int VAO, VBO;
-    CameraComponent* activeCamera = nullptr;
-    std::vector<std::shared_ptr<Entity>> entities;
-    std::shared_ptr<Entity> visualEntity;
-    
-    // Debug state
-    bool debugMode = false;
-    std::shared_ptr<Model> debugCubeModel;
-    
-    // Time tracking
-    float deltaTime = 0.0f;
-    float lastFrame = 0.0f;
-
     Game();
     ~Game();
 
-    void init(GLFWwindow* window);
-    void processInput(GLFWwindow* window);
-    void update();
-    void render();
+    // Initialize game-specific components and load the initial scene using the engine
+    void init(Engine& engine);
+
+private:
+    std::shared_ptr<Entity> visualEntity;
 };
-
-
 
 #endif

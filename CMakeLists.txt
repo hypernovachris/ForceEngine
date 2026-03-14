@@ -36,6 +36,7 @@ FetchContent_MakeAvailable(assimp)
 set(SOURCES
     src/main.cpp
     src/Game.cpp
+    src/Engine.cpp
     src/glad.c
     src/Shader.cpp
     src/stb_image.cpp
