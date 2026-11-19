@@ -2,46 +2,49 @@
 #define PHYSICS_COMPONENT_H
 
 #include "Component.h"
-#include "Entity.h"
 #include <glm/glm/glm.hpp>
+#include <sstream>
+#include <memory>
+#include <SDL3/SDL.h>
 
+enum class PhysicsColliderType {
+    SPHERE,
+    BOX
+};
 
 class PhysicsComponent : public Component {
 public:
+    PhysicsColliderType colliderType = PhysicsColliderType::SPHERE;
+
     glm::vec3 velocity{0.0f};
-    float gravity = -16.0f; 
-    
-    // Optional: Flappy Bird usually has a terminal velocity so the bird doesn't fall through the floor in one frame
-    float terminalVelocity = -20.0f; 
+    glm::vec3 acceleration{0.0f, -18.0f, 0.0f}; // Gravity
 
-    void update(float deltaTime) override {
-        if (!owner) return;
+    float mass = 1.0f;
+    float inverseMass = 1.0f;
+    bool isStatic = false;
 
-        // 1. Apply gravity to the velocity (Acceleration)
-        velocity.y += gravity * deltaTime;
+    float restitution = 0.75f;    // Bounciness (0 = no bounce, 1 = elastic)
+    float friction = 0.25f;       // Surface friction
+    float linearDamping = 0.998f; // Velocity retention per tick
 
-        // Clamp to terminal velocity
-        if (velocity.y < terminalVelocity) {
-            velocity.y = terminalVelocity;
-        }
+    // Collider dimensions
+    float radius = 0.5f;                    // For SPHERE
+    glm::vec3 halfExtents{0.5f, 0.5f, 0.5f}; // For BOX (half width/height/depth)
 
-        // 2. Apply velocity to the Entity's position
-        owner->position += velocity * deltaTime;
+    PhysicsComponent();
+    ~PhysicsComponent() override;
 
-        // Tilt the bird based on velocity
-        float tiltAngle = velocity.y * -45.0f / terminalVelocity;
-        owner->rotation.z = tiltAngle;
-    }
-    
-    // A helper function for the FlapController to call
-    void applyImpulse(float upwardForce) {
-        velocity.y = upwardForce;
-    }
+    void awake() override;
+    void update(float deltaTime) override;
 
-    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
-        // PhysicsComponent has no parameters in its constructor
-        return std::make_shared<PhysicsComponent>();
-    }
+    void setStatic(bool s);
+    void setMass(float m);
+    void setSphere(float r);
+    void setBox(const glm::vec3& extents);
+
+    void applyImpulse(const glm::vec3& impulse);
+
+    static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window);
 };
 
-#endif
+#endif // PHYSICS_COMPONENT_H

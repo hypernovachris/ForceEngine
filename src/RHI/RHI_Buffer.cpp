@@ -11,11 +11,14 @@ RHI_Buffer::~RHI_Buffer() {
 bool RHI_Buffer::create(SDL_GPUBufferUsageFlags usage, Uint32 size) {
     if (buffer) return false;
 
+    SDL_GPUDevice* device = RHI_Device::getInstance().getDevice();
+    if (!device) return false;
+
     SDL_GPUBufferCreateInfo info = {};
     info.usage = usage;
     info.size = size;
 
-    buffer = SDL_CreateGPUBuffer(RHI_Device::getInstance().getDevice(), &info);
+    buffer = SDL_CreateGPUBuffer(device, &info);
     if (!buffer) {
         std::cerr << "Failed to create GPU Buffer: " << SDL_GetError() << std::endl;
         return false;

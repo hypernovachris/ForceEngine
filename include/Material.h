@@ -26,6 +26,7 @@ public:
 
     MaterialUniformData materialData;
     glm::vec2 textureScale = glm::vec2(1.0f);
+    bool castsShadow = true;
 
     Material(std::shared_ptr<Shader> s) 
         : shader(s) {}

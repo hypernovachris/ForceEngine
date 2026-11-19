@@ -18,6 +18,19 @@ public:
     Uint32 vertexCount;
     Uint32 indexCount;
 
+    Mesh(const Vertex* vertices, Uint32 vCount, const Uint32* indices, Uint32 iCount) {
+        vertexCount = vCount;
+        indexCount = iCount;
+
+        Uint32 vSize = vertexCount * sizeof(Vertex);
+        vertexBuffer.create(SDL_GPU_BUFFERUSAGE_VERTEX, vSize);
+        vertexBuffer.uploadData(vertices, vSize);
+
+        Uint32 iSize = indexCount * sizeof(Uint32);
+        indexBuffer.create(SDL_GPU_BUFFERUSAGE_INDEX, iSize);
+        indexBuffer.uploadData(indices, iSize);
+    }
+
     Mesh(const std::vector<float>& vertices, const std::vector<unsigned int>& indices, bool hasNormals, bool hasUVs) {
         indexCount = static_cast<Uint32>(indices.size());
         

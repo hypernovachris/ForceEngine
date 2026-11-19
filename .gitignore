@@ -1,7 +1,6 @@
 # =========================
-# Build Directories
+# Build Directories & CMake
 # =========================
-# Ignore all CMake build and output folders
 build/
 build-*/
 out/
@@ -10,11 +9,12 @@ CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+CMakeUserPresets.json
+CMakePresets.json
 
 # =========================
 # Compiled Binaries
 # =========================
-# Ignore executables and libraries
 *.exe
 *.dll
 *.lib
@@ -34,30 +34,47 @@ Makefile
 *.vcxproj.filters
 *.vcxproj.user
 
-# VS Code
+# VS Code & JetBrains
 .vscode/
-
-# CLion / IntelliJ
 .idea/
 cmake-build-*/
 
 # =========================
 # OS Generated Files
 # =========================
-# Windows
 Thumbs.db
 desktop.ini
-
-# macOS
 .DS_Store
+._*
 
 # =========================
-# Game Engine Specifics
+# Engine Binary Formats & Datasets
 # =========================
-# Ignore generated log files or local crash dumps
+*.froad
+*.fterrainpack
+*.fquadspherepack
+*.dem
+*.bin
+*.npy
+*.geojson
+
+# Raw GIS datasets and tile downloads
+jughandle/
+
+# =========================
+# Scratch & Logs
+# =========================
+scratch/
 *.log
 *.crash
+__pycache__/
+*.py[cod]
 
+# =========================
+# Assets & Docs
+# =========================
 include/glm/doc
-
 assets/
+*.pdf
+SPHERE.md
+HANDOFF.md

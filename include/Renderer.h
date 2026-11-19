@@ -12,12 +12,15 @@
 
 class Entity;
 
-// 16-byte aligned for GPU uniform buffers
+// 16-byte aligned for GPU uniform buffers (128 bytes per light)
 struct PointLightData {
-    glm::vec4 position; // w is unused or for padding
-    glm::vec4 color;    // w is intensity
-    float intensity;
-    float pad[3];
+    glm::mat4 lightSpaceMatrix; // 64 bytes
+    glm::vec4 position;         // 16 bytes
+    glm::vec4 color;            // 16 bytes
+    glm::vec4 shadowTile;       // 16 bytes: uOffset, vOffset, uScale, vScale in shadow atlas
+    float intensity;            // 4 bytes
+    float castsShadow;          // 4 bytes: 1.0f if true, 0.0f otherwise
+    float pad[2];               // 8 bytes padding
 };
 
 struct DrawCommand {
@@ -26,9 +29,9 @@ struct DrawCommand {
     glm::mat4 transform;
 };
 
-// Global uniforms sent once per frame to binding 1
+// Global uniforms sent once per frame to binding 0
 struct GlobalUniforms {
-    glm::mat4 model; // Updated per draw though
+    glm::mat4 model;
     glm::mat4 view;
     glm::mat4 projection;
     glm::vec2 textureScale;
@@ -39,11 +42,26 @@ struct FragmentUniforms {
     glm::vec4 viewPos;
     int numLights;
     int pad[3];
-    PointLightData lights[16];
+    PointLightData lights[8]; // Up to 8 lights
     float hasDiffuse;
     float hasSpecular;
     float hasNormalMap;
     float pad2;
+};
+
+struct ShadowConstants {
+    glm::mat4 lightSpaceMatrix;
+    glm::mat4 model;
+};
+
+struct InternalLight {
+    glm::vec3 position;
+    glm::vec3 color;
+    float intensity;
+    bool castsShadow;
+    float fov;
+    float nearPlane;
+    float farPlane;
 };
 
 class Renderer {
@@ -51,7 +69,7 @@ public:
     Renderer();
     ~Renderer();
 
-    // Initialize SDL3_GPU pipelines
+    // Initialize SDL3_GPU pipelines and shadow resources
     void init();
 
     // Prepare the scene for rendering (reset queues)
@@ -60,25 +78,30 @@ public:
     // Submit an Entity for drawing
     void submitNode(std::shared_ptr<Entity> node);
 
-    // Bake and record graphics commands
+    // Bake and record graphics commands (Shadow Atlas pass + Forward Color pass)
     void endScene();
 
     // Render debug wireframes for lights and colliders
     void renderDebug(std::shared_ptr<Model> cubeModel);
 
 private:
-    std::vector<PointLightData> activeLights;
+    std::vector<InternalLight> activeLights;
     std::vector<DrawCommand> renderQueue;
     
-    // Per frame data
+    // Per frame camera data
     glm::mat4 m_viewMatrix;
     glm::mat4 m_projectionMatrix;
     glm::vec3 m_viewPos;
 
+    // Shadow Atlas Resources (4096 x 2048, 8 tiles of 1024 x 1024)
+    SDL_GPUTexture* shadowAtlasTexture = nullptr;
+    SDL_GPUSampler* shadowSampler = nullptr;
+    std::shared_ptr<Shader> shadowShader;
+    std::shared_ptr<RHI_Pipeline> shadowPipeline;
+
     // RHI specific caching
     std::shared_ptr<RHI_Pipeline> getOrCreatePipeline(std::shared_ptr<Shader> shader, bool enableDepthTest = true, bool debugLines = false);
-
-    // Uniform Buffers (we will use push constants or transfer buffers per frame for simplicity)
+    std::shared_ptr<RHI_Pipeline> getOrCreateShadowPipeline();
 };
 
-#endif
+#endif // RENDERER_H

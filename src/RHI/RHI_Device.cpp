@@ -38,13 +38,11 @@ SDL_GPUCommandBuffer* RHI_Device::beginFrame(SDL_GPUTexture*& outSwapchainTextur
 
     SDL_GPUCommandBuffer* cmdBuf = SDL_AcquireGPUCommandBuffer(device);
     if (!cmdBuf) {
-        std::cerr << "Failed to acquire command buffer: " << SDL_GetError() << std::endl;
         return nullptr;
     }
 
-    if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuf, window, &outSwapchainTexture, nullptr, nullptr)) {
-        std::cerr << "Failed to acquire swapchain texture: " << SDL_GetError() << std::endl;
-        SDL_SubmitGPUCommandBuffer(cmdBuf); // submit empty
+    if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmdBuf, window, &outSwapchainTexture, nullptr, nullptr) || !outSwapchainTexture) {
+        SDL_CancelGPUCommandBuffer(cmdBuf);
         return nullptr;
     }
 

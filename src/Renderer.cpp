@@ -6,13 +6,67 @@
 #include "../include/Model.h"
 #include "../include/RHI/RHI_Pipeline.h"
 #include <iostream>
+#include <algorithm>
 #include <glm/glm/gtc/matrix_transform.hpp>
 
 Renderer::Renderer() {}
-Renderer::~Renderer() {}
+
+Renderer::~Renderer() {
+    auto device = RHI_Device::getInstance().getDevice();
+    if (device) {
+        if (shadowAtlasTexture) {
+            SDL_ReleaseGPUTexture(device, shadowAtlasTexture);
+            shadowAtlasTexture = nullptr;
+        }
+        if (shadowSampler) {
+            SDL_ReleaseGPUSampler(device, shadowSampler);
+            shadowSampler = nullptr;
+        }
+    }
+}
 
 void Renderer::init() {
-    // Pipeline creation happens lazily or in a pre-warm pass.
+    auto& device = RHI_Device::getInstance();
+    if (!device.getDevice()) return;
+
+    // 1. Create Shadow Atlas Texture (4096 x 2048, D32_FLOAT, 8 tiles of 1024x1024)
+    if (!shadowAtlasTexture) {
+        SDL_GPUTextureCreateInfo shadowAtlasInfo = {};
+        shadowAtlasInfo.type = SDL_GPU_TEXTURETYPE_2D;
+        shadowAtlasInfo.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+        shadowAtlasInfo.width = 4096;
+        shadowAtlasInfo.height = 2048;
+        shadowAtlasInfo.layer_count_or_depth = 1;
+        shadowAtlasInfo.num_levels = 1;
+        shadowAtlasInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        shadowAtlasInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+        shadowAtlasTexture = SDL_CreateGPUTexture(device.getDevice(), &shadowAtlasInfo);
+        if (!shadowAtlasTexture) {
+            std::cerr << "Renderer: Failed to create Shadow Atlas texture: " << SDL_GetError() << std::endl;
+        }
+    }
+
+    // 2. Create Shadow Sampler (Nearest filtering for depth texture, Clamp to edge)
+    if (!shadowSampler) {
+        SDL_GPUSamplerCreateInfo samplerInfo = {};
+        samplerInfo.min_filter = SDL_GPU_FILTER_NEAREST;
+        samplerInfo.mag_filter = SDL_GPU_FILTER_NEAREST;
+        samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+        samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        samplerInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+        shadowSampler = SDL_CreateGPUSampler(device.getDevice(), &samplerInfo);
+        if (!shadowSampler) {
+            std::cerr << "Renderer: Failed to create Shadow Sampler: " << SDL_GetError() << std::endl;
+        }
+    }
+
+    // 3. Compile Shadow Shader
+    if (!shadowShader) {
+        shadowShader = std::make_shared<Shader>("assets/shaders/shadow.hlsl", "assets/shaders/shadow.hlsl");
+    }
 }
 
 void Renderer::beginScene(CameraComponent* camera) {
@@ -34,13 +88,17 @@ void Renderer::beginScene(CameraComponent* camera) {
 
 void Renderer::submitNode(std::shared_ptr<Entity> node) {
     auto lightComp = node->getComponent<LightComponent>();
-    if (lightComp) {
+    if (lightComp && activeLights.size() < 8) {
         glm::vec3 worldPos = glm::vec3(node->worldTransform[3]);
-        PointLightData pl = {};
-        pl.position = glm::vec4(worldPos, 1.0f);
-        pl.color = glm::vec4(lightComp->color, lightComp->intensity);
-        pl.intensity = lightComp->intensity;
-        activeLights.push_back(pl);
+        InternalLight il = {};
+        il.position = worldPos;
+        il.color = lightComp->color;
+        il.intensity = lightComp->intensity;
+        il.castsShadow = lightComp->castsShadow;
+        il.fov = lightComp->fov;
+        il.nearPlane = lightComp->nearPlane;
+        il.farPlane = lightComp->farPlane;
+        activeLights.push_back(il);
     }
     
     auto renderComp = node->getComponent<RendererComponent>();
@@ -93,7 +151,7 @@ std::shared_ptr<RHI_Pipeline> Renderer::getOrCreatePipeline(std::shared_ptr<Shad
 
     auto pipeline = std::make_shared<RHI_Pipeline>();
     SDL_GPUTextureFormat colorFormat = RHI_Device::getInstance().getSwapchainFormat();
-    SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT; // Standard Mac format usually D32_FLOAT or D24_UNORM_S8_UINT
+    SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
     pipeline->create(shader->vertexShader.get(), shader->fragmentShader.get(),
                      attributes, 4,
@@ -106,6 +164,54 @@ std::shared_ptr<RHI_Pipeline> Renderer::getOrCreatePipeline(std::shared_ptr<Shad
     return pipeline;
 }
 
+std::shared_ptr<RHI_Pipeline> Renderer::getOrCreateShadowPipeline() {
+    if (shadowPipeline) return shadowPipeline;
+    if (!shadowShader || !shadowShader->vertexShader || !shadowShader->fragmentShader) return nullptr;
+
+    SDL_GPUVertexAttribute attributes[4];
+    attributes[0].location = 0;
+    attributes[0].buffer_slot = 0;
+    attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+    attributes[0].offset = offsetof(Vertex, position);
+
+    attributes[1].location = 1;
+    attributes[1].buffer_slot = 0;
+    attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+    attributes[1].offset = offsetof(Vertex, normal);
+
+    attributes[2].location = 2;
+    attributes[2].buffer_slot = 0;
+    attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+    attributes[2].offset = offsetof(Vertex, texCoords);
+
+    attributes[3].location = 3;
+    attributes[3].buffer_slot = 0;
+    attributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+    attributes[3].offset = offsetof(Vertex, tangent);
+
+    SDL_GPUVertexBufferDescription binding[1];
+    binding[0].slot = 0;
+    binding[0].pitch = sizeof(Vertex);
+    binding[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    binding[0].instance_step_rate = 0;
+
+    auto pipeline = std::make_shared<RHI_Pipeline>();
+    SDL_GPUTextureFormat colorFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+
+    if (!pipeline->create(shadowShader->vertexShader.get(), shadowShader->fragmentShader.get(),
+                          attributes, 4,
+                          binding, 1,
+                          colorFormat, depthFormat,
+                          true)) {
+        std::cerr << "Renderer: Failed to create shadow graphics pipeline: " << SDL_GetError() << std::endl;
+        return nullptr;
+    }
+
+    shadowPipeline = pipeline;
+    return shadowPipeline;
+}
+
 void Renderer::endScene() {
     auto& device = RHI_Device::getInstance();
     SDL_GPUTexture* swapchainTexture = nullptr;
@@ -113,15 +219,120 @@ void Renderer::endScene() {
 
     if (!cmdBuf || !swapchainTexture) return;
 
-    // 1. We must have a depth attachment for 3D
-    // In a real engine, we cache this. For now, generate a transient depth texture each frame.
+    // Safety initialization of shadow resources if not already done
+    if (!shadowAtlasTexture) {
+        init();
+    }
+
+    // 1. Prepare Uniform Data
+    GlobalUniforms globalUniforms = {};
+    globalUniforms.view = m_viewMatrix;
+    globalUniforms.projection = m_projectionMatrix;
+
+    FragmentUniforms fragUniforms = {};
+    fragUniforms.viewPos = glm::vec4(m_viewPos, 1.0f);
+    fragUniforms.numLights = std::min((int)activeLights.size(), 8);
+
+    for (int i = 0; i < fragUniforms.numLights; ++i) {
+        const auto& light = activeLights[i];
+
+        // Downward-facing frustum:
+        // Eye: light position
+        // Target: light position looking straight down (-Y)
+        // Up vector: -Z (mutually orthogonal with -Y, zero gimbal lock)
+        glm::mat4 lightView = glm::lookAt(light.position, light.position + glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+        glm::mat4 lightProj = glm::perspectiveRH_ZO(glm::radians(light.fov), 1.0f, light.nearPlane, light.farPlane);
+        glm::mat4 lightSpaceMatrix = lightProj * lightView;
+
+        int col = i % 4;
+        int row = i / 4;
+        glm::vec4 shadowTile = glm::vec4(col * 0.25f, row * 0.5f, 0.25f, 0.5f);
+
+        fragUniforms.lights[i].lightSpaceMatrix = lightSpaceMatrix;
+        fragUniforms.lights[i].position = glm::vec4(light.position, 1.0f);
+        fragUniforms.lights[i].color = glm::vec4(light.color, 1.0f);
+        fragUniforms.lights[i].shadowTile = shadowTile;
+        fragUniforms.lights[i].intensity = light.intensity;
+        fragUniforms.lights[i].castsShadow = light.castsShadow ? 1.0f : 0.0f;
+    }
+
+    // 2. PASS 1: Multi-Light Shadow Atlas Pass (Depth-only)
+    if (shadowAtlasTexture) {
+        SDL_GPUDepthStencilTargetInfo shadowDepthTarget = {};
+        shadowDepthTarget.texture = shadowAtlasTexture;
+        shadowDepthTarget.cycle = false;
+        shadowDepthTarget.clear_depth = 1.0f;
+        shadowDepthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+        shadowDepthTarget.store_op = SDL_GPU_STOREOP_STORE;
+        shadowDepthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+        shadowDepthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+        SDL_GPURenderPass* shadowPass = SDL_BeginGPURenderPass(cmdBuf, nullptr, 0, &shadowDepthTarget);
+        if (shadowPass) {
+            auto shadowPipe = getOrCreateShadowPipeline();
+            if (shadowPipe && shadowPipe->getPipeline()) {
+                SDL_BindGPUGraphicsPipeline(shadowPass, shadowPipe->getPipeline());
+
+                for (int i = 0; i < fragUniforms.numLights; ++i) {
+                    if (!activeLights[i].castsShadow) continue;
+
+                    int col = i % 4;
+                    int row = i / 4;
+
+                    SDL_GPUViewport vp = {};
+                    vp.x = (float)(col * 1024);
+                    vp.y = (float)(row * 1024);
+                    vp.w = 1024.0f;
+                    vp.h = 1024.0f;
+                    vp.min_depth = 0.0f;
+                    vp.max_depth = 1.0f;
+                    SDL_SetGPUViewport(shadowPass, &vp);
+
+                    SDL_Rect sc = {};
+                    sc.x = col * 1024;
+                    sc.y = row * 1024;
+                    sc.w = 1024;
+                    sc.h = 1024;
+                    SDL_SetGPUScissor(shadowPass, &sc);
+
+                    glm::mat4 lsm = fragUniforms.lights[i].lightSpaceMatrix;
+
+                    for (const auto& cmd : renderQueue) {
+                        if (!cmd.mesh) continue;
+                        if (cmd.material && !cmd.material->castsShadow) continue;
+
+                        ShadowConstants scConstants;
+                        scConstants.lightSpaceMatrix = lsm;
+                        scConstants.model = cmd.transform;
+                        SDL_PushGPUVertexUniformData(cmdBuf, 0, &scConstants, sizeof(ShadowConstants));
+
+                        SDL_GPUBufferBinding vBinding = {};
+                        vBinding.buffer = cmd.mesh->vertexBuffer.getBuffer();
+                        vBinding.offset = 0;
+                        SDL_BindGPUVertexBuffers(shadowPass, 0, &vBinding, 1);
+
+                        SDL_GPUBufferBinding iBinding = {};
+                        iBinding.buffer = cmd.mesh->indexBuffer.getBuffer();
+                        iBinding.offset = 0;
+                        SDL_BindGPUIndexBuffer(shadowPass, &iBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+                        SDL_DrawGPUIndexedPrimitives(shadowPass, cmd.mesh->indexCount, 1, 0, 0, 0);
+                    }
+                }
+            }
+            SDL_EndGPURenderPass(shadowPass);
+        }
+    }
+
+    // 3. PASS 2: Forward Color Pass
+    // Depth attachment for main 3D scene
     SDL_GPUTextureCreateInfo depthInfo = {};
     depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
     depthInfo.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-    depthInfo.width = device.getWindow() ? 800 : 800; // Need real dimensions
-    depthInfo.height = device.getWindow() ? 600 : 600;
-    int w, h;
-    SDL_GetWindowSizeInPixels(device.getWindow(), &w, &h);
+    int w = 800, h = 600;
+    if (device.getWindow()) {
+        SDL_GetWindowSizeInPixels(device.getWindow(), &w, &h);
+    }
     depthInfo.width = w;
     depthInfo.height = h;
     depthInfo.layer_count_or_depth = 1;
@@ -131,10 +342,9 @@ void Renderer::endScene() {
 
     SDL_GPUTexture* depthTexture = SDL_CreateGPUTexture(device.getDevice(), &depthInfo);
 
-    // 2. Begin Render Pass
     SDL_GPUColorTargetInfo colorTarget = {};
     colorTarget.texture = swapchainTexture;
-    colorTarget.clear_color = {0.1f, 0.1f, 0.1f, 1.0f};
+    colorTarget.clear_color = {0.05f, 0.05f, 0.07f, 1.0f};
     colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
     colorTarget.store_op = SDL_GPU_STOREOP_STORE;
 
@@ -149,18 +359,6 @@ void Renderer::endScene() {
 
     SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(cmdBuf, &colorTarget, 1, &depthTarget);
 
-    // 3. Prepare Uniform Data
-    GlobalUniforms globalUniforms = {};
-    globalUniforms.view = m_viewMatrix;
-    globalUniforms.projection = m_projectionMatrix;
-
-    FragmentUniforms fragUniforms = {};
-    fragUniforms.viewPos = glm::vec4(m_viewPos, 1.0f);
-    fragUniforms.numLights = std::min((int)activeLights.size(), 16);
-    for (int i = 0; i < fragUniforms.numLights; ++i) {
-        fragUniforms.lights[i] = activeLights[i];
-    }
-
     // 4. Draw Opaque Scene
     for (const auto& cmd : renderQueue) {
         if (!cmd.mesh || !cmd.material) continue;
@@ -172,7 +370,7 @@ void Renderer::endScene() {
 
         cmd.material->updateData();
 
-        // Push globals
+        // Push globals (vertex uniforms)
         globalUniforms.model = cmd.transform;
         globalUniforms.textureScale = cmd.material->textureScale;
         SDL_PushGPUVertexUniformData(cmdBuf, 0, &globalUniforms, sizeof(GlobalUniforms));
@@ -191,8 +389,12 @@ void Renderer::endScene() {
         ShininessData sd = { cmd.material->materialData.shininess, {0.0f, 0.0f, 0.0f} };
         SDL_PushGPUFragmentUniformData(cmdBuf, 1, &sd, sizeof(ShininessData));
 
-        // Bind Textures
-        SDL_GPUTextureSamplerBinding samplers[3] = {};
+        // Bind Textures:
+        // Slot 0: Diffuse Map
+        // Slot 1: Specular Map
+        // Slot 2: Normal Map
+        // Slot 3: Shadow Atlas Texture
+        SDL_GPUTextureSamplerBinding samplers[4] = {};
         Texture* fallbackTex = nullptr;
         if (cmd.material->diffuseMap) fallbackTex = cmd.material->diffuseMap.get();
         else if (cmd.material->specularMap) fallbackTex = cmd.material->specularMap.get();
@@ -208,10 +410,13 @@ void Renderer::endScene() {
             samplers[2].texture = cmd.material->normalMap ? cmd.material->normalMap->rhiTexture.getTexture() : fallbackTex->rhiTexture.getTexture();
             samplers[2].sampler = cmd.material->normalMap ? cmd.material->normalMap->rhiTexture.getSampler() : fallbackTex->rhiTexture.getSampler();
 
-            SDL_BindGPUFragmentSamplers(renderPass, 0, samplers, 3);
+            samplers[3].texture = shadowAtlasTexture;
+            samplers[3].sampler = shadowSampler;
+
+            SDL_BindGPUFragmentSamplers(renderPass, 0, samplers, 4);
         }
         
-        // Let's bind buffers
+        // Bind vertex and index buffers
         SDL_GPUBufferBinding vBinding = {};
         vBinding.buffer = cmd.mesh->vertexBuffer.getBuffer();
         vBinding.offset = 0;

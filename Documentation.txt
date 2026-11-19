@@ -8,3 +8,23 @@ mesh in the collection will use the first material in the collection, and so on.
 A mesh is a collection of vertices, and a material is a collection of textures.
 The formats .ForceModel and .ForceMaterial are pretty simple. You can
 probably understand them just by reading them.
+
+    Maps in ForceEngine use the compiled binary format .fmap.
+A map compiles all static level geometry down into pre-merged meshes
+grouped by material (so the entire level geometry renders in just a few
+draw calls as a single Model), alongside contiguous tables for static
+collision boxes, gameplay trigger volumes, atmospheric lights, and the
+player's spawn transform. The engine loads this format directly into GPU
+and physics buffers with zero runtime string parsing.
+
+    Roads in ForceEngine use the compiled binary format .froad (Version 2).
+The road network uses a 512m x 512m spatial domain decomposition strategy aligned
+1:1 with terrain LOD 3 tiles (8x 64m base tiles). Road corridors are split at
+exact chunk boundaries, with cross-chunk topological connectivity recorded in
+FRoadCrossChunkRecord entries. When solving road elevations over high-resolution LiDAR
+terrain, Dirichlet boundary condition locking enforces seamless height and tangent
+continuity across chunk seams. Road ribbons include 30cm wide 3D curbs (15cm above
+the road deck and 50cm below as a terrain drop skirt). RoadEditor supports selecting
+and editing individual 512m chunks with read-only visualization of the 8 adjacent chunks,
+while RoadTerrainViewer dynamically streams and renders a 3x3 road-chunk area around
+the player.

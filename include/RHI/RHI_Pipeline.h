@@ -14,7 +14,8 @@ public:
                 const SDL_GPUVertexAttribute* attributes, Uint32 numAttributes,
                 const SDL_GPUVertexBufferDescription* bindings, Uint32 numBindings,
                 SDL_GPUTextureFormat colorFormat, SDL_GPUTextureFormat depthFormat,
-                bool enableDepthTest = true);
+                bool enableDepthTest = true, bool enableBlend = false,
+                bool enableDepthWrite = true, SDL_GPUCompareOp compareOp = SDL_GPU_COMPAREOP_LESS_OR_EQUAL);
 
     SDL_GPUGraphicsPipeline* getPipeline() const { return pipeline; }
 

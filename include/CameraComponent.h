@@ -15,13 +15,28 @@ public:
     float nearPlane;
     float farPlane;
 
-    CameraComponent(float fov = 45.0f, float aspectRatio = 800.0f / 600.0f, float nearPlane = 0.1f, float farPlane = 100.0f)
+    bool useExplicitVectors = false;
+    glm::vec3 frontVector{0.0f, 0.0f, -1.0f};
+    glm::vec3 upVector{0.0f, 1.0f, 0.0f};
+
+    CameraComponent(float fov = 60.0f, float aspectRatio = 800.0f / 600.0f, float nearPlane = 0.1f, float farPlane = 200.0f)
         : fov(fov), aspectRatio(aspectRatio), nearPlane(nearPlane), farPlane(farPlane) {}
+
+    void setLookVectors(const glm::vec3& front, const glm::vec3& up = glm::vec3(0.0f, 1.0f, 0.0f)) {
+        useExplicitVectors = true;
+        frontVector = glm::normalize(front);
+        upVector = glm::normalize(up);
+    }
 
     glm::mat4 getViewMatrix() const {
         if (!owner) return glm::mat4(1.0f);
         
         glm::vec3 position = glm::vec3(owner->worldTransform[3]);
+
+        if (useExplicitVectors) {
+            return glm::lookAt(position, position + frontVector, upVector);
+        }
+
         glm::vec3 forward = -glm::normalize(glm::vec3(owner->worldTransform[2]));
         glm::vec3 up = glm::normalize(glm::vec3(owner->worldTransform[1]));
         
@@ -33,12 +48,11 @@ public:
     }
 
     static std::shared_ptr<Component> deserialize(std::istringstream& iss, SDL_Window* window) {
-        float fov = 45.0f;
+        float fov = 60.0f;
         float aspect = 800.0f / 600.0f;
         float nearP = 0.1f;
-        float farP = 100.0f;
+        float farP = 200.0f;
         
-        // Read up to 4 values
         if (iss >> fov) {
             if (iss >> aspect) {
                 if (iss >> nearP) {
@@ -51,4 +65,4 @@ public:
     }
 };
 
-#endif
+#endif // CAMERA_COMPONENT_H
